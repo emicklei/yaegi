@@ -115,23 +115,21 @@ func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, erro
 	interp.frame.mutex.Unlock()
 	interp.mutex.Unlock()
 
-	// Once all package sources have been parsed, collect entry points then init functions.
-	rootRunners := []*node{}
+	// Once all package sources have been parsed, execute entry points then init functions.
 	for _, n := range rootNodes {
 		if err = genRun(n); err != nil {
 			return nil, err
 		}
-		// do not run it but save it for initnodes
-		rootRunners = append(rootRunners, n)
+		// do not run it but put in front of the initnodes
+		// interp.run(n, nil)
+		initNodes = append([]*node{n}, initNodes...)
 	}
-	initNodes = append(rootRunners, initNodes...)
 
 	// Wire and execute global vars in global scope gs.
 	n, err := genGlobalVars(rootNodes, gs)
 	if err != nil {
 		return nil, err
 	}
-	// do run these ahead of the program
 	interp.run(n, nil)
 
 	// Add main to list of functions to run, after all inits.
