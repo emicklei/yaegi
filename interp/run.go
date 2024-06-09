@@ -99,7 +99,6 @@ func (interp *Interpreter) run(n *node, cf *frame) {
 	if n == nil {
 		return
 	}
-	fmt.Println("interp.run:", n.name(), n.action.String())
 
 	var f *frame
 	if cf == nil {
