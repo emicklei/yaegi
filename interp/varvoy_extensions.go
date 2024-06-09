@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"strconv"
 )
 
 // this file contains extensions to the interp package
@@ -22,7 +21,7 @@ func (interp *Interpreter) CompilePackage(mainDir string) (*Program, error) {
 // importPath. rPath is the relative path to the directory containing the source
 // code for the package.
 func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, error) {
-	var dir string = importPath
+	var dir string
 	var err error
 
 	files, err := fs.ReadDir(interp.opt.filesystem, importPath)
@@ -120,9 +119,7 @@ func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, erro
 		if err = genRun(n); err != nil {
 			return nil, err
 		}
-		// do not run it but put in front of the initnodes
-		// interp.run(n, nil)
-		initNodes = append([]*node{n}, initNodes...)
+		interp.run(n, nil)
 	}
 
 	// Wire and execute global vars in global scope gs.
@@ -141,8 +138,4 @@ func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, erro
 		init:    initNodes,
 		root:    root,
 	}, nil
-}
-
-func (b Breakpoint) String() string {
-	return b.Position.String() + ",valid=" + strconv.FormatBool(b.Valid)
 }
