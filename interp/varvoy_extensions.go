@@ -1,10 +1,12 @@
 package interp
 
 import (
+	"context"
 	"fmt"
 	"io/fs"
+	"log/slog"
+	"os"
 	"path/filepath"
-	"strconv"
 )
 
 // this file contains extensions to the interp package
@@ -21,6 +23,7 @@ func (interp *Interpreter) CompilePackage(mainDir string) (*Program, error) {
 // loadSources calls gta on the source code for the package identified by
 // importPath. rPath is the relative path to the directory containing the source
 // code for the package.
+// NOTE: this implementation is a modified version of *Interpreter.importSrc(...)
 func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, error) {
 	var dir string = importPath
 	var err error
@@ -77,7 +80,7 @@ func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, erro
 		var list []*node
 		list, err = interp.gta(root, subRPath, importPath, pkgName)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("gta failed:%w subRPath:%s importPath:%s pkgName:%s file:%s", err, subRPath, importPath, pkgName, file)
 		}
 		revisit[subRPath] = append(revisit[subRPath], list...)
 	}
@@ -115,29 +118,29 @@ func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, erro
 	interp.frame.mutex.Unlock()
 	interp.mutex.Unlock()
 
-	// Once all package sources have been parsed, collect entry points then init functions.
-	rootRunners := []*node{}
-	for _, n := range rootNodes {
-		if err = genRun(n); err != nil {
-			return nil, err
-		}
-		// do not run it but save it for initnodes
-		rootRunners = append(rootRunners, n)
-	}
-	initNodes = append(rootRunners, initNodes...)
-
 	// Wire and execute global vars in global scope gs.
 	n, err := genGlobalVars(rootNodes, gs)
 	if err != nil {
 		return nil, err
 	}
-	// do run these ahead of the program
 	interp.run(n, nil)
+	// if n != nil {
+	// 	initNodes = append(initNodes, n)
+	// } else {
+	// 	slog.Debug("no node for global vars")
+	// }
+	// initNodes = append(rootNodes, initNodes...)
 
 	// Add main to list of functions to run, after all inits.
 	if m := gs.sym[mainID]; pkgName == mainID && m != nil {
 		initNodes = append(initNodes, m.node)
 	}
+
+	// if debug enabled then export CFG and AST
+	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		exportDots(initNodes, root)
+	}
+
 	return &Program{
 		pkgName: "main",
 		init:    initNodes,
@@ -145,6 +148,24 @@ func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, erro
 	}, nil
 }
 
-func (b Breakpoint) String() string {
-	return b.Position.String() + ",valid=" + strconv.FormatBool(b.Valid)
+// for inspection only
+func exportDots(initNodes []*node, root *node) {
+	cwd, _ := os.Getwd()
+	indices := []int64{}
+	for _, each := range initNodes {
+		if each != nil { // can be nil
+			indices = append(indices, each.index)
+		}
+	}
+	slog.Debug("exporting CFG and AST",
+		"root.index", root.index,
+		"initnodes", indices,
+		"cfg", fmt.Sprintf("dot -Tpng %s/varvoy-cfg.dot > varvoy-cfg.png && open varvoy-cfg.png", cwd),
+		"ast", fmt.Sprintf("dot -Tpng %s/varvoy-ast.dot > varvoy-ast.png && open varvoy-ast.png", cwd))
+	df, _ := os.Create("varvoy-cfg.dot")
+	root.cfgDot(df)
+	df.Close()
+	df, _ = os.Create("varvoy-ast.dot")
+	root.astDot(df, "ast")
+	df.Close()
 }
