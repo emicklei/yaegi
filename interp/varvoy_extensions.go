@@ -138,6 +138,8 @@ func (interp *Interpreter) loadSources(rPath, importPath string) (*Program, erro
 
 	// if debug enabled then export CFG and AST
 	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
+		ns := inspect_server{root}
+		go ns.start()
 		exportDots(initNodes, root)
 	}
 
